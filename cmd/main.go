@@ -8,19 +8,26 @@ package main
 // fmt - Used to format and print output
 // os - Used to access operating system functionality
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/shellsage/sg/internal/cli"
 )
 
 func main() {
-	fmt.Println("Hello World")
-	fmt.Println(os.Args)
+	// signal.NotifyContext creates a context that auto-cancels on Ctrl+C.
+	// os.Interrupt = Ctrl+C
+	// syscall.SIGTERM = `kill` command (used by Docker, Kubernetes)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	if (len(os.Args)< 2) {
-		fmt.Fprintln(os.Stderr, "Usage: sg \"your query here\"")
+	// cli.Execute starts the Cobra command parser.
+	// If it returns an error, print it and exit with code 1.
+	if err := cli.Execute(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "sg: %v\n", err)
 		os.Exit(1)
 	}
-
-	query := os.Args[1]
-	fmt.Printf("ShellSage: you asked: %s\n", query)
 }
