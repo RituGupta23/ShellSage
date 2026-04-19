@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"github.com/spf13/cobra" // THIRD-PARTY import
+	"github.com/shellsage/sg/internal/detector"
 )
 
 // globalFlags holds parsed value from CLI flags
@@ -23,7 +24,7 @@ type globalFlags struct {
 	noColor bool // --noColor : disable colors
 }
 	
-var gf globalFlags // this variable is accessible throughout the package
+var gf globalFlags // this variable is accessible throughout the package (but not exported as started with lowercase)
 
 // cobra.Command is a struct that describes one CLI command.
 
@@ -61,11 +62,12 @@ func init() {
 // cmd = the Cobra command object, args = the positional arguments
 func runRoot(cmd *cobra.Command, args []string) error {
 	query := strings.Join(args, " ")
+
+	osInfo := detector.Detect(gf.osOverride)
+
 	fmt.Printf("Query: %s\n", query)
-	fmt.Printf("Provider: %s\n", gf.prov)
-	fmt.Printf("Model: %s\n", gf.model)
-	fmt.Printf("OS override: %s\n", gf.osOverride)
-	fmt.Printf("Run: %v, Dry: %v\n", gf.run, gf.dry)
+	fmt.Printf("OS: %s\n", osInfo.OS)
+	fmt.Printf("Shell: %s\n", osInfo.Shell)
 
 	return nil
 }
