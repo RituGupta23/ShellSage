@@ -12,6 +12,7 @@ import (
 	"strings"
 	"github.com/spf13/cobra" // THIRD-PARTY import
 	"github.com/shellsage/sg/internal/detector"
+	"github.com/shellsage/sg/internal/prompts"
 )
 
 // globalFlags holds parsed value from CLI flags
@@ -68,6 +69,9 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Query: %s\n", query)
 	fmt.Printf("OS: %s\n", osInfo.OS)
 	fmt.Printf("Shell: %s\n", osInfo.Shell)
+
+	systemPrompt, _ := prompts.Default()
+	fmt.Printf("Prompt loaded: %d characters\n", len(systemPrompt))
 
 	return nil
 }
