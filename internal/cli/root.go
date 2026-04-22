@@ -10,9 +10,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"os"
 	"github.com/spf13/cobra" // THIRD-PARTY import
 	"github.com/shellsage/sg/internal/detector"
 	"github.com/shellsage/sg/internal/prompts"
+	"github.com/shellsage/sg/internal/provider"
 )
 
 // globalFlags holds parsed value from CLI flags
@@ -72,6 +74,27 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	systemPrompt, _ := prompts.Default()
 	fmt.Printf("Prompt loaded: %d characters\n", len(systemPrompt))
+
+	providerName := gf.prov
+	if providerName == "" {
+		providerName = "gemini"
+	}
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	prov, err := provider.New(providerName, apiKey, gf.model, "")
+	if err != nil {
+		return fmt.Errorf("initialising provider: %w", err)
+	}
+	resp, err := prov.GenerateCommand(cmd.Context(), provider.CommandRequest{
+		Query: query, OS: osInfo.OS, Shell: osInfo.Shell, SystemPrompt: systemPrompt,
+	})
+	if err != nil {
+		return fmt.Errorf("generating command: %w", err)
+	}
+	fmt.Printf("Primary: %s → %s\n", resp.Primary.OS, resp.Primary.Command)
+	for _, v := range resp.Variants {
+		fmt.Printf("  %s (%s): %s\n", v.OS, v.Shell, v.Command)
+	}
+	fmt.Printf("Risk: %s — %s\n", resp.RiskLevel, resp.RiskReason)
 
 	return nil
 }
