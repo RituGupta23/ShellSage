@@ -15,6 +15,7 @@ import (
 	"github.com/shellsage/sg/internal/detector"
 	"github.com/shellsage/sg/internal/prompts"
 	"github.com/shellsage/sg/internal/provider"
+	"github.com/shellsage/sg/internal/ui"
 )
 
 // globalFlags holds parsed value from CLI flags
@@ -68,12 +69,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	osInfo := detector.Detect(gf.osOverride)
 
-	fmt.Printf("Query: %s\n", query)
-	fmt.Printf("OS: %s\n", osInfo.OS)
-	fmt.Printf("Shell: %s\n", osInfo.Shell)
-
 	systemPrompt, _ := prompts.Default()
-	fmt.Printf("Prompt loaded: %d characters\n", len(systemPrompt))
 
 	providerName := gf.prov
 	if providerName == "" {
@@ -90,11 +86,8 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("generating command: %w", err)
 	}
-	fmt.Printf("Primary: %s → %s\n", resp.Primary.OS, resp.Primary.Command)
-	for _, v := range resp.Variants {
-		fmt.Printf("  %s (%s): %s\n", v.OS, v.Shell, v.Command)
-	}
-	fmt.Printf("Risk: %s — %s\n", resp.RiskLevel, resp.RiskReason)
 
-	return nil
+	renderer := ui.NewRenderer(gf.noColor)
+	_, err = renderer.DisplayAndPrompt(cmd.Context(), resp, osInfo, gf.run, gf.dry)
+	return err
 }
