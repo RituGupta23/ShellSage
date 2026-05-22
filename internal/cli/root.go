@@ -1,49 +1,48 @@
-// Package cli wires together all Cobra commands and global flags.
-// Why internal
-// Any package inside internal/ is private to this module
-// No one outside github.com/shellsage/sg can import it.
-// Go's way to implement => " This is an implementation detail, not public API."
-
+// Package cli wires together all Cobra commands and global flags for ShellSage.
 package cli
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"os"
-	"github.com/spf13/cobra" // THIRD-PARTY import
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/shellsage/sg/internal/config"
 	"github.com/shellsage/sg/internal/detector"
-	"github.com/shellsage/sg/internal/prompts"
 	"github.com/shellsage/sg/internal/provider"
 	"github.com/shellsage/sg/internal/ui"
 )
 
-// globalFlags holds parsed value from CLI flags
+// globalFlags holds values parsed from persistent/root-level flags.
 type globalFlags struct {
-	run bool // --run : execute the command
-	dry bool // --dry : display the command
-	osOverride string // --osOverride : override detected os
-	prov string // --provider: which AI to use
-	model string // --model : which AI model
-	noColor bool // --noColor : disable colors
+	run        bool
+	dry        bool
+	osOverride string
+	prov       string
+	model      string
+	noColor    bool
 }
-	
-var gf globalFlags // this variable is accessible throughout the package (but not exported as started with lowercase)
 
-// cobra.Command is a struct that describes one CLI command.
+var gf globalFlags
 
-var rootCmd = &cobra.Command {
-	Use: "sg [query]", // how the command is invoked
-	Short: "ShellSage - translate plain English into shell commands", // what the command do
+// rootCmd is the top-level Cobra command — invoked as `sg "query"`.
+var rootCmd = &cobra.Command{
+	Use:   "sg [query]",
+	Short: "ShellSage — translate plain English into shell commands",
 	Long: `ShellSage uses AI to translate plain English into shell commands.
-	Examples:
-    sg "find all log files modified in the last 3 days"
-    sg --run "kill the process using port 3000"
-    sg --provider gemini "compress this folder" `,  // more detailed description
-	Args: cobra.MinimumNArgs(1), // validation rule - atleast 1 argument required
-	RunE: runRoot, // function to execute when command is run
-	SilenceUsage: true, 
-	SilenceErrors: true, 
+
+Examples:
+  sg "find all log files modified in the last 3 days"
+  sg --run "kill the process using port 3000"
+  sg --dry "delete all node_modules folders recursively"
+  sg --os linux "compress the project folder into a zip"`,
+	Args:              cobra.MinimumNArgs(1),
+	RunE:              runRoot,
+	SilenceUsage:      true,
+	SilenceErrors:     true,
+	DisableFlagParsing: false,
 }
 
 // Execute is the entry point called by main.go.
@@ -51,43 +50,99 @@ func Execute(ctx context.Context) error {
 	return rootCmd.ExecuteContext(ctx)
 }
 
-// init() is a special Go function. It runs AUTOMATICALLY before main().
-// Every package can have init() functions. We use it to register flags with Cobra.
 func init() {
-	rootCmd.PersistentFlags().BoolVar(&gf.run, "run", false, "Execute the generated command immediately")
-	rootCmd.PersistentFlags().BoolVar(&gf.dry, "dry", false, "Display only, never execute")
-	rootCmd.PersistentFlags().StringVar(&gf.osOverride, "os", "", "Override detected OS: macos | linux | windows")
-	rootCmd.PersistentFlags().StringVar(&gf.prov, "provider", "", "AI provider: claude | openai | ollama | gemini")
-	rootCmd.PersistentFlags().StringVar(&gf.model, "model", "", "Override AI model name")
-	rootCmd.PersistentFlags().BoolVar(&gf.noColor, "no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().BoolVar(&gf.run, "run", false,
+		"Execute the generated command immediately after confirmation")
+	rootCmd.PersistentFlags().BoolVar(&gf.dry, "dry", false,
+		"Display only, never execute (overrides config default)")
+	rootCmd.PersistentFlags().StringVar(&gf.osOverride, "os", "",
+		"Override detected OS: macos | linux | windows")
+	rootCmd.PersistentFlags().StringVar(&gf.prov, "provider", "",
+		"Override config provider: claude | openai | ollama | gemini")
+	rootCmd.PersistentFlags().StringVar(&gf.model, "model", "",
+		"Override model (e.g. gemini-1.5-flash, gpt-4o-mini, claude-haiku-4-20250514)")
+	rootCmd.PersistentFlags().BoolVar(&gf.noColor, "no-color", false,
+		"Disable lipgloss styling (plain text output)")
+
+	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
-// runRoot is called when the user types: sg "some query"
-// cmd = the Cobra command object, args = the positional arguments
+// runRoot implements the main `sg "query"` flow.
 func runRoot(cmd *cobra.Command, args []string) error {
 	query := strings.Join(args, " ")
 
-	osInfo := detector.Detect(gf.osOverride)
-
-	systemPrompt, _ := prompts.Default()
-
-	providerName := gf.prov
-	if providerName == "" {
-		providerName = "gemini"
+	// Load config.
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
 	}
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	prov, err := provider.New(providerName, apiKey, gf.model, "")
+
+	// Apply flag overrides to cfg.
+	applyFlagOverrides(cfg)
+
+	// Detect OS and shell.
+	osInfo := detector.Detect(cfg.Behavior.OSOverride)
+
+	// Resolve the system prompt.
+	systemPrompt, err := resolveSystemPrompt(cfg)
+	if err != nil {
+		return fmt.Errorf("loading system prompt: %w", err)
+	}
+
+	// Build the provider.
+	prov, err := provider.New(cfg.Provider.Name, cfg.Provider.APIKey, cfg.Provider.Model, cfg.Provider.BaseURL)
 	if err != nil {
 		return fmt.Errorf("initialising provider: %w", err)
 	}
-	resp, err := prov.GenerateCommand(cmd.Context(), provider.CommandRequest{
-		Query: query, OS: osInfo.OS, Shell: osInfo.Shell, SystemPrompt: systemPrompt,
-	})
+
+	// Call AI.
+	req := provider.CommandRequest{
+		Query:        query,
+		OS:           osInfo.OS,
+		Shell:        osInfo.Shell,
+		SystemPrompt: systemPrompt,
+	}
+	resp, err := prov.GenerateCommand(cmd.Context(), req)
 	if err != nil {
 		return fmt.Errorf("generating command: %w", err)
 	}
 
-	renderer := ui.NewRenderer(gf.noColor)
-	_, err = renderer.DisplayAndPrompt(cmd.Context(), resp, osInfo, gf.run, gf.dry)
+	// Render result and handle user interaction.
+	isDry := gf.dry || cfg.Behavior.DefaultMode == "dry" && !gf.run
+	renderer := ui.NewRenderer(cfg.Behavior.NoColor)
+	_, err = renderer.DisplayAndPrompt(cmd.Context(), resp, osInfo, gf.run, isDry)
 	return err
+}
+
+// applyFlagOverrides copies CLI flag values into the resolved config, giving flags
+// the highest priority (flags > env > config file > defaults).
+func applyFlagOverrides(cfg *config.Config) {
+	if gf.osOverride != "" {
+		cfg.Behavior.OSOverride = gf.osOverride
+	}
+	if gf.prov != "" {
+		prevProvider := cfg.Provider.Name
+		cfg.Provider.Name = gf.prov
+		// Re-resolve the API key for the newly selected provider so that
+		// provider-specific env vars (e.g. GEMINI_API_KEY) are picked up
+		// even when the flag overrides the default provider after Load().
+		cfg.Provider.APIKey = config.ResolveAPIKey(cfg.Provider.Name, cfg.Provider.APIKey)
+		// Reset model to the new provider's default when the provider changed,
+		// so a Claude model name isn't accidentally sent to Gemini/OpenAI.
+		if prevProvider != cfg.Provider.Name && cfg.Provider.Model == config.DefaultModel {
+			cfg.Provider.Model = defaultModelForProvider(cfg.Provider.Name)
+		}
+	}
+	// --model flag takes highest priority and always wins.
+	if gf.model != "" {
+		cfg.Provider.Model = gf.model
+	}
+	if gf.noColor {
+		cfg.Behavior.NoColor = true
+	}
+	// Check the NO_COLOR env var (https://no-color.org).
+	if os.Getenv("NO_COLOR") != "" {
+		cfg.Behavior.NoColor = true
+	}
 }

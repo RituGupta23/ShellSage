@@ -12,7 +12,7 @@ const defaultClaudeModel = "claude-sonnet-4-20250514"
 
 // claudeProvider implements Provider using the Anthropic Claude API.
 type claudeProvider struct {
-	client *anthropic.Client
+	client anthropic.Client
 	model  string
 }
 
@@ -39,14 +39,12 @@ func (p *claudeProvider) GenerateCommand(ctx context.Context, req CommandRequest
 	userMessage := buildUserMessage(req)
 
 	msg, err := p.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.F(anthropic.Model(p.model)),
-		MaxTokens: anthropic.F(int64(1024)),
-		System: anthropic.F([]anthropic.TextBlockParam{
-			anthropic.NewTextBlock(req.SystemPrompt),
-		}),
-		Messages: anthropic.F([]anthropic.MessageParam{
+		Model:     anthropic.Model(p.model),
+		MaxTokens: 1024,
+		System: []anthropic.TextBlockParam{{Text: req.SystemPrompt}},
+		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(userMessage)),
-		}),
+		},
 	})
 	if err != nil {
 		return CommandResponse{}, &ErrAPICall{
@@ -64,12 +62,4 @@ func (p *claudeProvider) GenerateCommand(ctx context.Context, req CommandRequest
 
 	raw := msg.Content[0].Text
 	return parseAIResponse(raw, req.OS, "claude")
-}
-
-// buildUserMessage constructs the user-turn message sent to the AI.
-func buildUserMessage(req CommandRequest) string {
-	return fmt.Sprintf(
-		"OS: %s\nShell: %s\nQuery: %s",
-		req.OS, req.Shell, req.Query,
-	)
 }

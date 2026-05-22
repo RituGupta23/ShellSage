@@ -140,8 +140,3 @@ func (p *geminiProvider) GenerateCommand(ctx context.Context, req CommandRequest
 
 	return parseAIResponse(parts[0].Text, req.OS, "gemini")
 }
-
-// buildUserMessage creates the text sent as the "user" turn to the AI.
-func buildUserMessage(req CommandRequest) string {
-	return fmt.Sprintf("OS: %s\nShell: %s\nQuery: %s", req.OS, req.Shell, req.Query)
-}
