@@ -236,3 +236,4 @@ func pingOllama(ctx context.Context, baseURL string) error {
 	resp.Body.Close()
 	return nil
 }
+Putting the API key in source code is not recommended because:

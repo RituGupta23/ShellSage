@@ -74,7 +74,13 @@ func New(name, apiKey, model, baseURL string) (Provider, error) {
 	switch name {
 	case "gemini":
 		return NewGemini(apiKey, model)
+	case "openai":
+		return NewOpenAI(apiKey, model)
+	case "claude":
+		return NewClaude(apiKey, model)
+	case "ollama":
+		return NewOllama(baseURL, model)
 	default:
-		return nil, fmt.Errorf("unknown provider %q — valid options: gemini", name)
+		return nil, fmt.Errorf("unknown provider %q — valid options: claude, openai, ollama, gemini", name)
 	}
 }
