@@ -199,6 +199,44 @@ go install ./cmd
 
 After installation, the `sg` binary is available in `$GOBIN` or `$GOPATH/bin`.
 
+### Using `sg` after install
+
+1. Initialize config and set your provider:
+
+```bash
+sg config init
+```
+
+2. Ask ShellSage to translate a natural-language command:
+
+```bash
+sg "list all files modified in the last 7 days"
+```
+
+3. Preview only without execution:
+
+```bash
+sg --dry "remove temporary files"
+```
+
+4. Execute a generated command after confirmation:
+
+```bash
+sg --run "update Homebrew packages"
+```
+
+5. Override provider or model for a single run:
+
+```bash
+sg --provider openai --model gpt-4o "find large files"
+```
+
+6. Show current config:
+
+```bash
+sg config show
+```
+
 ### Release downloads
 
 When you publish a GitHub release, this project will automatically build release binaries for:
@@ -208,6 +246,23 @@ When you publish a GitHub release, this project will automatically build release
 - `windows/amd64`
 
 Users can download the matching binary from the GitHub Releases page without needing `go install`.
+
+To install from a downloaded release asset:
+
+1. Download the binary for your platform.
+2. Make it executable (Linux/macOS):
+
+```bash
+chmod +x sg_darwin_amd64
+```
+
+3. Move it into your PATH:
+
+```bash
+mv sg_darwin_amd64 ~/bin/sg
+```
+
+On Windows, download the `.exe` file and run it directly.
 
 > Note: make sure your public repo path matches the module path in `go.mod`.
 
