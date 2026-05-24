@@ -1,276 +1,449 @@
-# ShellSage CLI (sg)
+# ShellSage (`sg`)
 
-A small AI-powered CLI utility that translates natural language shell command requests into executable commands for macOS, Linux, and Windows.
+ShellSage translates plain English into shell commands using AI. Describe what you want to do — ShellSage generates the correct command for your OS, classifies how dangerous it is, and optionally runs it after your confirmation.
 
-This repository contains the `myproject/` implementation of ShellSage, a Golang CLI that:
-- accepts a plain-English command request
-- uses an AI provider to generate OS-specific shell commands
-- displays command variants for macOS/Linux/Windows
-- classifies risk and optionally runs the selected command
+```
+sg "find all log files modified in the last 3 days"
 
-> The current implementation resolves provider configuration from `~/.shellsage/config.toml` and environment variables.
+  macOS / Linux   →  find . -name "*.log" -mtime -3
+  Windows         →  Get-ChildItem -Recurse -Filter *.log | Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-3) }
 
-## Architecture
-
-```mermaid
-flowchart LR
-  User["User: sg \"query\""] --> CLI["CLI Layer\ninternal/cli"]
-  CLI --> Config["Config Loader\ninternal/config"]
-  CLI --> Detector["OS Detector\ninternal/detector"]
-  CLI --> Prompt["Prompt Resolver\ninternal/prompts"]
-  CLI --> Provider["AI Provider\ninternal/provider"]
-  CLI --> UI["Terminal Renderer\ninternal/ui"]
-  Provider --> Gemini["Gemini API"]
-  UI --> Terminal["Terminal / Shell"]
+  Run? [y/N]
 ```
 
-### Component responsibilities
+---
 
-- `cmd/main.go` - application entry point; creates cancellation context and executes the CLI.
-- `internal/cli` - Cobra commands, flag parsing, `sg` runtime flow, config overrides.
-- `internal/config` - loads settings from defaults, `~/.shellsage/config.toml`, and environment variables.
-- `internal/detector` - detects current OS and shell, and supports `--os` overrides.
-- `internal/prompts` - provides bundled system prompt text and optional user override.
-- `internal/provider` - sends requests to the AI provider and parses JSON response.
-- `internal/ui` - prints variants, risk banners, confirmation prompts, and executes commands.
-- `internal/risk` - classifies command risk (`low`, `medium`, `high`).
+## Table of Contents
 
-## Supported commands
+- [Supported AI Providers](#supported-ai-providers)
+- [Installation](#installation)
+  - [Option 1 — Pre-built Binary (no Go required)](#option-1--pre-built-binary-no-go-required)
+  - [Option 2 — go install (requires Go)](#option-2--go-install-requires-go)
+  - [Option 3 — Build from Source](#option-3--build-from-source)
+- [First-time Setup](#first-time-setup)
+- [Usage](#usage)
+- [Flags](#flags)
+- [Configuration](#configuration)
+- [Risk Classification](#risk-classification)
+- [Use as a Go Library](#use-as-a-go-library)
 
-### `sg "query"`
+---
 
-Translate a natural language request into a shell command.
+## Supported AI Providers
 
-Example:
-```bash
-./dist/sg "list open ports"
-```
+| Provider | Default Model | Free Tier | API Key Env Var |
+|---|---|---|---|
+| **Gemini** (default) | `gemini-2.5-flash` | Yes | `GEMINI_API_KEY` |
+| **Claude** | `claude-sonnet-4-20250514` | No | `ANTHROPIC_API_KEY` |
+| **OpenAI** | `gpt-4o` | No | `OPENAI_API_KEY` |
+| **Ollama** | `llama3` | Local, free | none |
 
-### `sg config init`
+---
 
-Run the interactive setup wizard and write configuration to `~/.shellsage/config.toml`.
+## Installation
 
-### `sg config show`
+### Option 1 — Pre-built Binary (no Go required)
 
-Print the resolved configuration with redacted API key.
+Download a pre-compiled binary from the [Releases page](https://github.com/RituGupta23/ShellSage/releases). No Go installation needed.
 
-### `sg version`
+---
 
-Show build metadata and version information.
+#### macOS
 
-## Flags
-
-Root command flags apply to `sg "query"`:
-
-- `--run` - execute the generated command immediately after confirmation.
-- `--dry` - display generated commands only; never execute.
-- `--os <macos|linux|windows>` - override OS detection.
-- `--provider <claude|openai|ollama|gemini>` - override configured provider.
-- `--model <model-name>` - override configured model name.
-  - example: `sg --provider openai --model gpt-4o-mini "your query"`
-  - or `sg --provider claude --model claude-sonnet-4-20250514 "your query"`
-- `--no-color` - disable styled/colored terminal output.
-
-## Configuration
-
-### Default config file
-
-ShellSage stores config under:
-
-```text
-~/.shellsage/config.toml
-```
-
-### Default config layout
-
-```toml
-[provider]
-  name     = "gemini"
-  model    = "gemini-2.5-flash"
-  api_key  = ""
-  base_url = ""
-
-[behavior]
-  default_mode  = "dry"
-  confirm_risky = true
-  os_override   = ""
-  no_color      = false
-
-[prompt]
-  override_path = ""
-```
-
-### Environment variables
-
-The CLI resolves keys in this order:
-1. provider-specific env var for selected provider
-   - `GEMINI_API_KEY`
-   - `OPENAI_API_KEY`
-   - `ANTHROPIC_API_KEY`
-2. fallback `SHELLSAGE_API_KEY`
-3. config file value
-
-Also supported:
-- `SHELLSAGE_PROVIDER`
-- `NO_COLOR` (forces plain text output)
-
-### Prompt override
-
-If `prompt.override_path` is set or `~/.shellsage/prompts/system.txt` exists, that prompt replaces the embedded default system prompt.
-
-## Input / Output behavior
-
-### Input
-
-The CLI expects a single positional natural language query argument:
+**Step 1 — Find your architecture**
 
 ```bash
-sg "delete all node_modules folders recursively"
+uname -m
+# arm64  → Apple Silicon (M1/M2/M3/M4) → download sg_darwin_arm64
+# x86_64 → Intel Mac                    → download sg_darwin_amd64
 ```
 
-### Output
+**Step 2 — Download** the correct file from the [latest release](https://github.com/RituGupta23/ShellSage/releases/latest).
 
-The output includes:
-- a command variant table for macOS, Linux, and Windows
-- a risk banner when the detected OS command is medium or high risk
-- an interactive confirmation flow before execution
-
-If a command variant is selected for execution, ShellSage uses the detected/overridden OS and shell to choose the primary command.
-
-## Execution flow
-
-1. `internal/cli` loads configuration.
-2. CLI applies flag overrides.
-3. OS and shell are detected in `internal/detector`.
-4. The system prompt is resolved from embedded prompt or override file.
-5. `internal/provider` sends the query to Gemini and parses the AI result.
-6. `internal/ui` displays variants, risk state, and prompts the user.
-7. If confirmed and not dry-run, the selected command is executed.
-
-## Provider support
-
-The code is structured to support multiple providers, and the provider factory now wires all implemented backends.
-
-Supported providers:
-- `gemini`
-- `openai`
-- `claude`
-- `ollama`
-
-Model selection
-- Override the model with `--model <model-name>`.
-- Set `provider.model` in `~/.shellsage/config.toml` to make the change permanent.
-- Provider defaults:
-  - Gemini: `gemini-2.5-flash`
-  - OpenAI: `gpt-4o`
-  - Claude: `claude-sonnet-4-20250514`
-  - Ollama: `llama3`
-
-The config wizard prompts for these providers, and the provider factory in `myproject/internal/provider/provider.go` now constructs the correct implementation for each one.
-
-## Build and run
-
-### Requirements
-
-- Go 1.26+
-
-### Build
-
-From `myproject/`:
+**Step 3 — Install**
 
 ```bash
-cd myproject
-make build
+cd ~/Downloads
+
+# Make it executable (replace arm64 with amd64 if Intel)
+chmod +x sg_darwin_arm64
+
+# Move to /usr/local/bin so it's available system-wide
+sudo mv sg_darwin_arm64 /usr/local/bin/sg
 ```
 
-### Install as a Go tool
+**Step 4 — Remove macOS security quarantine**
 
-If the repository is published and accessible, users can install the CLI directly with Go:
+macOS blocks unsigned binaries by default. Run this once:
+
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/sg
+```
+
+If you see a popup instead, go to **System Settings → Privacy & Security** and click **Allow Anyway**.
+
+**Step 5 — Verify**
+
+```bash
+sg version
+```
+
+---
+
+#### Linux
+
+**Step 1 — Download** `sg_linux_amd64` from the [latest release](https://github.com/RituGupta23/ShellSage/releases/latest).
+
+**Step 2 — Install**
+
+```bash
+cd ~/Downloads
+chmod +x sg_linux_amd64
+sudo mv sg_linux_amd64 /usr/local/bin/sg
+```
+
+**Step 3 — Verify**
+
+```bash
+sg version
+```
+
+If `/usr/local/bin` is not in your PATH:
+
+```bash
+echo 'export PATH="$PATH:/usr/local/bin"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+#### Windows
+
+**Step 1 — Download** `sg_windows_amd64.exe` from the [latest release](https://github.com/RituGupta23/ShellSage/releases/latest).
+
+**Step 2 — Install**
+
+Option A — copy to System32 (available everywhere, requires admin):
+```powershell
+# In PowerShell as Administrator
+Copy-Item "$env:USERPROFILE\Downloads\sg_windows_amd64.exe" "C:\Windows\System32\sg.exe"
+```
+
+Option B — create a personal bin folder and add it to PATH:
+```powershell
+# Create folder
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\bin"
+
+# Copy and rename the binary
+Copy-Item "$env:USERPROFILE\Downloads\sg_windows_amd64.exe" "$env:USERPROFILE\bin\sg.exe"
+
+# Add to PATH permanently (run once)
+[Environment]::SetEnvironmentVariable(
+  "PATH",
+  $env:PATH + ";$env:USERPROFILE\bin",
+  [EnvironmentVariableTarget]::User
+)
+
+# Reload PATH in current session
+$env:PATH += ";$env:USERPROFILE\bin"
+```
+
+**Step 3 — Verify** (open a new PowerShell window)
+
+```powershell
+sg version
+```
+
+---
+
+### Option 2 — `go install` (requires Go)
+
+Requires [Go 1.21+](https://go.dev/dl/).
 
 ```bash
 go install github.com/RituGupta23/ShellSage/cmd@latest
 ```
 
-If they have the repository locally, they can install from the source tree:
+The binary will be placed in `~/go/bin/`. Make sure that directory is in your PATH.
 
+**macOS / Linux:**
 ```bash
-go install ./cmd
+echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc   # or ~/.bashrc
+source ~/.zshrc
 ```
 
-After installation, the `sg` binary is available in `$GOBIN` or `$GOPATH/bin`.
+**Windows (PowerShell):**
+```powershell
+$gopath = go env GOPATH
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$gopath\bin", [EnvironmentVariableTarget]::User)
+$env:PATH += ";$gopath\bin"
+```
 
-### Using `sg` after install
+**Note:** The installed binary will be named `cmd`. Rename it to `sg`:
 
-1. Initialize config and set your provider:
+```bash
+# macOS / Linux
+mv "$(go env GOPATH)/bin/cmd" "$(go env GOPATH)/bin/sg"
+
+# Windows PowerShell
+Rename-Item "$env:GOPATH\bin\cmd.exe" "sg.exe"
+```
+
+**Verify:**
+```bash
+sg version
+```
+
+---
+
+### Option 3 — Build from Source
+
+Requires [Go 1.21+](https://go.dev/dl/) and `make`.
+
+**macOS / Linux:**
+
+```bash
+git clone https://github.com/RituGupta23/ShellSage.git
+cd ShellSage
+
+# Build and install to ~/go/bin/sg
+make install
+
+# OR just build locally to ./dist/sg
+make build
+./dist/sg version
+```
+
+**Windows (PowerShell):**
+
+```powershell
+git clone https://github.com/RituGupta23/ShellSage.git
+cd ShellSage
+
+# Build manually (no make on Windows by default)
+go build -trimpath -o dist\sg.exe .\cmd
+
+.\dist\sg.exe version
+```
+
+To install the Windows build globally:
+```powershell
+Copy-Item "dist\sg.exe" "C:\Windows\System32\sg.exe"
+```
+
+**Available make targets:**
+
+| Command | Description |
+|---|---|
+| `make build` | Compile binary to `./dist/sg` |
+| `make install` | Build and install to `~/go/bin/sg` |
+| `make test` | Run all tests with race detector |
+| `make lint` | Run golangci-lint |
+| `make clean` | Remove build artifacts |
+
+---
+
+## First-time Setup
+
+After installing, run the interactive setup wizard once:
 
 ```bash
 sg config init
 ```
 
-2. Ask ShellSage to translate a natural-language command:
+Example session:
 
-```bash
-sg "list all files modified in the last 7 days"
+```
+ShellSage Configuration Wizard
+────────────────────────────────────────
+AI provider [claude/openai/ollama/gemini] (default: claude): gemini
+Model (default: gemini-2.5-flash):
+API key (detected GEMINI_API_KEY in environment — press Enter to use it):
+Default mode [dry/run] (default: dry):
+Validating API key with gemini... OK
+
+Config written to /Users/yourname/.shellsage/config.toml
+You can now run: sg "your query here"
 ```
 
-3. Preview only without execution:
+This writes `~/.shellsage/config.toml` (on Windows: `C:\Users\yourname\.shellsage\config.toml`).
 
+### Skip the wizard — use environment variables
+
+Set your API key as an environment variable and ShellSage works immediately with no config file.
+
+**macOS / Linux:**
 ```bash
-sg --dry "remove temporary files"
+# Add to ~/.zshrc or ~/.bashrc
+export GEMINI_API_KEY="your-key-here"
+
+# Reload
+source ~/.zshrc
 ```
 
-4. Execute a generated command after confirmation:
+**Windows (PowerShell):**
+```powershell
+# Set permanently for your user
+[Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-key-here", [EnvironmentVariableTarget]::User)
 
-```bash
-sg --run "update Homebrew packages"
+# Apply in current session
+$env:GEMINI_API_KEY = "your-key-here"
 ```
 
-5. Override provider or model for a single run:
+### Getting API Keys
+
+| Provider | Where to get it |
+|---|---|
+| Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — free tier available |
+| Claude | [console.anthropic.com](https://console.anthropic.com) |
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| Ollama | No key needed — install Ollama locally from [ollama.com](https://ollama.com) |
+
+---
+
+## Usage
 
 ```bash
-sg --provider openai --model gpt-4o "find large files"
+sg "your plain English query"
 ```
 
-6. Show current config:
+### Examples
 
 ```bash
+# Show the command, then ask if you want to run it
+sg "find all files larger than 100MB"
+
+# Show command for a different OS without running
+sg --dry --os linux "open port 8080 in the firewall"
+
+# Generate and execute immediately (still confirms for risky commands)
+sg --run "list all running processes sorted by memory"
+
+# Use a specific provider for one query
+sg --provider claude "compress the src folder into a tar.gz"
+
+# Use a specific model
+sg --model gemini-2.5-flash "show all open network connections"
+
+# Check your current configuration
 sg config show
+
+# Re-run the setup wizard
+sg config init
+
+# Show version info
+sg version
 ```
 
-### Release downloads
+---
 
-When you publish a GitHub release, this project will automatically build release binaries for:
-- `linux/amd64`
-- `darwin/amd64`
-- `darwin/arm64`
-- `windows/amd64`
+## Flags
 
-Users can download the matching binary from the GitHub Releases page without needing `go install`.
+| Flag | Description |
+|---|---|
+| `--run` | Execute the generated command after confirmation |
+| `--dry` | Display the command only — never execute, even for low-risk commands |
+| `--os <name>` | Override detected OS: `macos`, `linux`, or `windows` |
+| `--provider <name>` | Override configured provider: `claude`, `openai`, `gemini`, `ollama` |
+| `--model <name>` | Override configured model (e.g. `gpt-4o-mini`, `claude-haiku-4-20250514`) |
+| `--no-color` | Disable colored output (plain text) |
 
-To install from a downloaded release asset:
+Flags always take priority over the config file.
 
-1. Download the binary for your platform.
-2. Make it executable (Linux/macOS):
+---
+
+## Configuration
+
+The config file lives at `~/.shellsage/config.toml` (created by `sg config init`).
+
+```toml
+[provider]
+  name     = "gemini"                  # claude | openai | ollama | gemini
+  model    = "gemini-2.5-flash"
+  api_key  = "your-api-key-here"
+  base_url = ""                        # only needed for ollama
+
+[behavior]
+  default_mode  = "dry"               # dry = display only | run = execute after confirm
+  confirm_risky = true                 # extra confirmation for medium/high risk commands
+  os_override   = ""                   # force a specific OS: macos | linux | windows
+  no_color      = false
+
+[prompt]
+  override_path = ""                   # path to a custom system prompt file
+```
+
+### Configuration Priority (highest to lowest)
+
+1. CLI flags (`--provider`, `--model`, `--os`, etc.)
+2. Environment variables (`GEMINI_API_KEY`, `SHELLSAGE_PROVIDER`, etc.)
+3. Config file (`~/.shellsage/config.toml`)
+4. Built-in defaults
+
+### Environment Variables
+
+| Variable | Description |
+|---|---|
+| `GEMINI_API_KEY` | API key for Google Gemini |
+| `ANTHROPIC_API_KEY` | API key for Anthropic Claude |
+| `OPENAI_API_KEY` | API key for OpenAI |
+| `SHELLSAGE_API_KEY` | Generic fallback API key for any provider |
+| `SHELLSAGE_PROVIDER` | Override the default provider |
+| `NO_COLOR` | Set to any value to disable colored output |
+
+### Custom System Prompt
+
+You can replace the built-in AI instructions with your own prompt file:
+
+```toml
+[prompt]
+  override_path = "/path/to/my-prompt.txt"
+```
+
+Or place a file at `~/.shellsage/prompts/system.txt` — ShellSage picks it up automatically.
+
+### Ollama (local AI, no API key)
+
+Install [Ollama](https://ollama.com), pull a model, then configure ShellSage:
 
 ```bash
-chmod +x sg_darwin_amd64
+ollama pull llama3
+
+# Either run the wizard
+sg config init
+# → choose "ollama", set base URL to http://localhost:11434
+
+# Or set directly in config.toml
 ```
 
-3. Move it into your PATH:
+```toml
+[provider]
+  name     = "ollama"
+  model    = "llama3"
+  base_url = "http://localhost:11434"
+```
+
+---
+
+## Risk Classification
+
+Every generated command is classified before you see it. ShellSage runs both a local pattern-based classifier and asks the AI — and always uses the **more dangerous** of the two ratings.
+
+| Level | What it means | Examples | Confirmation |
+|---|---|---|---|
+| **Low** | Read-only or informational | `ls`, `grep`, `cat`, `find`, `ps`, `ping` | `[y/N]` prompt |
+| **Medium** | Mutates state but recoverable | `mv`, `cp -r`, `apt install`, `curl POST`, `systemctl` | Warning banner + `[y/N]` |
+| **High** | Irreversible or destructive | `rm -rf`, `dd`, `mkfs`, `shutdown`, `chmod 777` | Must type **`yes`** in full |
+
+---
+
+## Use as a Go Library
+
+ShellSage exposes a public API in `pkg/shellsage` for use in other Go programs — no CLI, no terminal UI, no command execution.
 
 ```bash
-mv sg_darwin_amd64 ~/bin/sg
+go get github.com/RituGupta23/ShellSage
 ```
-
-On Windows, download the `.exe` file and run it directly.
-
-> Note: make sure your public repo path matches the module path in `go.mod`.
-
-### Use as a Go library
-
-This repository now exposes a public library wrapper in `pkg/shellsage`.
-
-Example:
 
 ```go
 package main
@@ -278,69 +451,37 @@ package main
 import (
     "context"
     "fmt"
+    "log"
 
     "github.com/RituGupta23/ShellSage/pkg/shellsage"
 )
 
 func main() {
+    // Load config from ~/.shellsage/config.toml + env vars
     cfg, err := shellsage.LoadConfig()
     if err != nil {
-        panic(err)
+        log.Fatal(err)
     }
 
-    resp, err := shellsage.RunQuery(context.Background(), cfg, "list all .env files")
+    // Translate a plain English query into shell commands
+    resp, err := shellsage.RunQuery(context.Background(), cfg, "list all docker containers")
     if err != nil {
-        panic(err)
+        log.Fatal(err)
     }
 
-    fmt.Printf("Result: %+v\n", resp)
+    fmt.Println(resp.Primary.Command)   // docker ps -a
+    fmt.Println(resp.RiskLevel)         // low
+    fmt.Println(resp.RiskReason)        // Read-only listing command.
+
+    // Access all OS variants
+    for _, v := range resp.Variants {
+        fmt.Printf("%s (%s): %s\n", v.OS, v.Shell, v.Command)
+    }
 }
 ```
 
-The library uses the same config rules as the CLI, including:
-- `~/.shellsage/config.toml`
-- provider-specific env vars: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
-- fallback `SHELLSAGE_API_KEY`
-- `provider.base_url` for Ollama
+---
 
-This lets the project be used as both a CLI and an importable module.
+## License
 
-Binary output:
-
-```bash
-./dist/sg
-```
-
-### Install
-
-```bash
-cd myproject
-make install
-```
-
-### Run directly
-
-```bash
-cd myproject
-go run ./cmd -- "list open ports"
-```
-
-### Run tests
-
-```bash
-cd myproject
-make test
-```
-
-### Clean artifacts
-
-```bash
-cd myproject
-make clean
-```
-
-## Example usage
-
-```bash
-cd myproject
-./dist/sg "show me all open ports"
+MIT
