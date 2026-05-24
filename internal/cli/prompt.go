@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/shellsage/sg/internal/config"
-	"github.com/shellsage/sg/internal/prompts"
+	"github.com/RituGupta23/ShellSage/internal/config"
+	"github.com/RituGupta23/ShellSage/internal/prompts"
 )
 
 // resolveSystemPrompt returns the system prompt string to use for the AI call.

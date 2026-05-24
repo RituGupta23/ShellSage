@@ -14,7 +14,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/shellsage/sg/internal/cli"
+	"github.com/RituGupta23/ShellSage/internal/cli"
 )
 
 func main() {

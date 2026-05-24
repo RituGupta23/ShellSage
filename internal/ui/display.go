@@ -9,9 +9,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/shellsage/sg/internal/detector"
-	"github.com/shellsage/sg/internal/provider"
-	"github.com/shellsage/sg/internal/risk"
+	"github.com/RituGupta23/ShellSage/internal/detector"
+	"github.com/RituGupta23/ShellSage/internal/provider"
+	"github.com/RituGupta23/ShellSage/internal/risk"
 )
 
 // Renderer handles all terminal output and user interaction.

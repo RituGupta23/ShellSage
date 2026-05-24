@@ -183,6 +183,34 @@ cd myproject
 make build
 ```
 
+### Install as a Go tool
+
+If the repository is published and accessible, users can install the CLI directly with Go:
+
+```bash
+go install github.com/RituGupta23/ShellSage/cmd@latest
+```
+
+If they have the repository locally, they can install from the source tree:
+
+```bash
+go install ./cmd
+```
+
+After installation, the `sg` binary is available in `$GOBIN` or `$GOPATH/bin`.
+
+### Release downloads
+
+When you publish a GitHub release, this project will automatically build release binaries for:
+- `linux/amd64`
+- `darwin/amd64`
+- `darwin/arm64`
+- `windows/amd64`
+
+Users can download the matching binary from the GitHub Releases page without needing `go install`.
+
+> Note: make sure your public repo path matches the module path in `go.mod`.
+
 ### Use as a Go library
 
 This repository now exposes a public library wrapper in `pkg/shellsage`.
@@ -196,7 +224,7 @@ import (
     "context"
     "fmt"
 
-    "github.com/shellsage/sg/pkg/shellsage"
+    "github.com/RituGupta23/ShellSage/pkg/shellsage"
 )
 
 func main() {

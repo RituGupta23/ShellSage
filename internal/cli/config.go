@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shellsage/sg/internal/config"
-	"github.com/shellsage/sg/internal/provider"
+	"github.com/RituGupta23/ShellSage/internal/config"
+	"github.com/RituGupta23/ShellSage/internal/provider"
 )
 
 // configCmd is the parent `sg config` command.
@@ -236,4 +236,3 @@ func pingOllama(ctx context.Context, baseURL string) error {
 	resp.Body.Close()
 	return nil
 }
-Putting the API key in source code is not recommended because:

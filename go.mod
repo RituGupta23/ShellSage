@@ -1,4 +1,4 @@
-module github.com/shellsage/sg
+module github.com/RituGupta23/ShellSage
 
 go 1.26.1
 

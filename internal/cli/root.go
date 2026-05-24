@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shellsage/sg/internal/config"
-	"github.com/shellsage/sg/internal/detector"
-	"github.com/shellsage/sg/internal/provider"
-	"github.com/shellsage/sg/internal/ui"
+	"github.com/RituGupta23/ShellSage/internal/config"
+	"github.com/RituGupta23/ShellSage/internal/detector"
+	"github.com/RituGupta23/ShellSage/internal/provider"
+	"github.com/RituGupta23/ShellSage/internal/ui"
 )
 
 // globalFlags holds values parsed from persistent/root-level flags.
