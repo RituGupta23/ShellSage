@@ -26,6 +26,7 @@ sg "find all log files modified in the last 3 days"
 - [Configuration](#configuration)
 - [Risk Classification](#risk-classification)
 - [Use as a Go Library](#use-as-a-go-library)
+- [Contributing](#contributing)
 
 ---
 
@@ -479,9 +480,14 @@ func main() {
     }
 }
 ```
+---
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ---
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
